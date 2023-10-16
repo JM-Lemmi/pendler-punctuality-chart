@@ -1,11 +1,24 @@
+#! /bin/python3
+
 import requests
 import json
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
-import time
+import argparse
+import urllib.parse
+
+import datetime
+
+# get the args
+parser = argparse.ArgumentParser("punctuality_chart.py", description="A script to plot the punctuality of a train every day.")
+parser.add_argument("--train", help="The full train number to be checked. See bahn.expert for Regional Train full numbers", type=str)
+parser.add_argument("--days", help="Number of days to look into the past", type=int, default=7)
+parser.add_argument("--departure", help="The departure station name", type=str)
+parser.add_argument("--arrival", help="The arrival station name", type=str)
+args = parser.parse_args()
+startdate = datetime.datetime.now().date() - datetime.timedelta(days=args.days-1) #zieht hier 1 zu viel ab.
 
 # get the data
 
@@ -13,33 +26,51 @@ headers = {
     'authority': 'bahn.expert',
     'accept': 'application/json, text/plain, */*',
     'accept-language': 'en-GB,en;q=0.9,en-US;q=0.8,de;q=0.7',
-    'referer': 'https://bahn.expert/details/S%2038318/2023-10-11T05:24:00.000Z?administration=801539',
+    'referer': 'https://bahn.expert/details/'+urllib.parse.quote_plus(args.train)+'/'+startdate.isoformat()+'T00:00:00.000Z?administration=801539',
 }
 
 date = []
+for i in range(args.days): date.append(startdate + datetime.timedelta(days=i))
 departure = []
 arrival = []
 
-#                               ⬇️ skip 9 and 10 because they are error prone
-for i in [1, 2, 3, 4, 5, 6, 7, 8, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]:
+for d in date:
+    search_arrival = False
+
     params = {
-        'initialDepartureDate': '2023-09-'+str(i).zfill(2)+'T05:56:00.000Z',
+        'initialDepartureDate': d.isoformat()+'T00:00:00.000Z',
         'administration': '801539',
     }
+    response = requests.get(
+        'https://bahn.expert/api/journeys/v1/details/'+urllib.parse.quote_plus(args.train),
+        params=params, headers=headers
+    )
+    print(str(d.day) + ": " + str(response))
 
-    response = requests.get('https://bahn.expert/api/journeys/v1/details/S%2038318', params=params, headers=headers)
-    print(params['initialDepartureDate'] + ": " + str(response))
+    responsejson = json.loads(response.content)
 
-    date.append(params["initialDepartureDate"])
-    # explainer:     ⬇️ read jsonfrom api     ⬇️ 9th stop is WiesWdf   ⬇️ real ⬇️ only the hour timestamp
-    departuretime = json.loads(response.content)["stops"][11]["departure"]["time"][11:16]
-    arrivaltime = json.loads(response.content)["stops"][14]["arrival"]["time"][11:16]
+    for i in range(len(responsejson["stops"])):
+        if not search_arrival and responsejson["stops"][i]["station"]["name"] == args.departure:
+            # explainer:                                ⬇️ real time ⬇️ only the hour:minute timestamp
+            departuretime = responsejson["stops"][i]["departure"]["time"][11:16]
+            planneddeparturetime = responsejson["stops"][i]["departure"]["scheduledTime"][11:16]
+            print("found departure time: " + departuretime)
+            search_arrival = True
+       
+        elif search_arrival and responsejson["stops"][i]["station"]["name"] == args.arrival:
+            arrivaltime = responsejson["stops"][i]["arrival"]["time"][11:16]
+            plannedarrivaltime = responsejson["stops"][i]["arrival"]["scheduledTime"][11:16]
+            print("found arrival time: " + arrivaltime)
+            break
 
     departuretimeh = int(departuretime[:2]) + int(departuretime[3:])/60
     arrivaltimeh = int(arrivaltime[:2]) + int(arrivaltime[3:])/60
 
     departure.append(departuretimeh)
     arrival.append(arrivaltimeh)
+
+planneddeparturetime = int(planneddeparturetime[:2]) + int(planneddeparturetime[3:])/60
+plannedarrivaltime = int(plannedarrivaltime[:2]) + int(plannedarrivaltime[3:])/60
 
 # plot the data
 
@@ -51,8 +82,9 @@ ax = df.plot(kind='bar', y='Height', x='Category', bottom=df['Lower'],
              color='darkgreen', legend=False)
 ax.axhline(0, color='black')
 ax.set_ylim(6, 7) #sets the y range
+ax.invert_yaxis()
 
-ax.hlines(y=[6+(1/60),6+(12/60)], xmin=[0,0], xmax=[len(arrival),len(arrival)]) # hline for wdf departure and ma-arena arrival
+ax.hlines(y=[planneddeparturetime,plannedarrivaltime], xmin=[0,0], xmax=[len(arrival),len(arrival)]) # hline for planned times
 
 plt.tight_layout()
 plt.show()

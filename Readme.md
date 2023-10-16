@@ -1,7 +1,31 @@
 # Commuter Punctuality Chart
 
-so my commuter train was so consistently late, I wanted to plot that timing.
+So my commuter train was so consistently late, I wanted to plot that timing to show it to everyone.
 
-currently hardcoded plots the 08:01 S3 38318 Wiesloch -> Heidelberg Hbf for all of September
+## usage
+
+```
+punctuality_chart.py [-h] [--train TRAIN] [--days DAYS] [--departure DEPARTURE] [--arrival ARRIVAL]
+
+options:
+  -h, --help            show this help message and exit
+  --train TRAIN         The full train number to be checked. See bahn.expert for Regional Train full numbers
+  --days DAYS           Number of days to look into the past
+  --departure DEPARTURE
+                        The departure station name
+  --arrival ARRIVAL     The arrival station name
+```
+
+### Example
+
+```
+python .\punctuality-chart.py --train "S 38318" --days 7 --departure "Wiesloch-Walldorf" --arrival "Heidelberg Hbf"
+```
 
 ![](example_chart.png)
+
+## Dependencies
+
+```
+pip install -r .\requirements.txt
+```
